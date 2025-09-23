@@ -35,7 +35,7 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
                                 patientStmt.setString(2, patient.getMobile());
                                 patientStmt.setString(3, patient.getAddress());
                                 patientStmt.setString(4, patient.getAge());
-                                patientStmt.setDouble(5, patient.getNic());
+                                patientStmt.setString(5, patient.getNic()); // Fixed: setString instead of setDouble
                                 patientStmt.setInt(6, patient.getBranch_id());
                                 patientStmt.executeUpdate();
                                 
@@ -76,7 +76,10 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
             return false;
         } finally {
             try {
-                if (conn != null) conn.setAutoCommit(true);
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -97,7 +100,7 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
                 patientStmt.setString(2, patient.getMobile());
                 patientStmt.setString(3, patient.getAddress());
                 patientStmt.setString(4, patient.getAge());
-                patientStmt.setDouble(5, patient.getNic());
+                patientStmt.setString(5, patient.getNic()); // Fixed: setString instead of setDouble
                 patientStmt.setInt(6, patient.getBranch_id());
                 patientStmt.setInt(7, patient.getId());
                 patientStmt.executeUpdate();
@@ -127,7 +130,10 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
             return false;
         } finally {
             try {
-                if (conn != null) conn.setAutoCommit(true);
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -161,7 +167,10 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
             return false;
         } finally {
             try {
-                if (conn != null) conn.setAutoCommit(true);
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -171,74 +180,95 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
     @Override
     public List<Appointment> getAllAppointments() {
         List<Appointment> appointments = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
         try {
+            conn = MySQL.getConnection();
             String sql = "SELECT a.id, a.details, a.time, a.users_id, a.appointmentDate, " +
                          "p.id as patient_id, p.name, p.mobile, p.address, p.age, p.nic, p.branch_id " +
                          "FROM appointment a " +
                          "JOIN patient p ON a.patient_id = p.id " +
                          "ORDER BY a.appointmentDate DESC";
 
-            try (ResultSet rs = MySQL.execute(sql)) {
-                while (rs.next()) {
-                    Appointment appointment = new Appointment();
-                    appointment.setAppointmentId(rs.getInt("id"));
-                    appointment.setDetails(rs.getString("details"));
-                    appointment.setTime(rs.getString("time"));
-                    appointment.setUserId(rs.getInt("users_id"));
-                    appointment.setChannelDate(rs.getDate("appointmentDate"));
+            stmt = conn.prepareStatement(sql);
+            rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                Appointment appointment = new Appointment();
+                appointment.setAppointmentId(rs.getInt("id"));
+                appointment.setDetails(rs.getString("details"));
+                appointment.setTime(rs.getString("time"));
+                appointment.setUserId(rs.getInt("users_id"));
+                appointment.setChannelDate(rs.getDate("appointmentDate"));
 
-                    Patient patient = new Patient();
-                    patient.setId(rs.getInt("patient_id"));
-                    patient.setName(rs.getString("name"));
-                    patient.setMobile(rs.getString("mobile"));
-                    patient.setAddress(rs.getString("address"));
-                    patient.setAge(rs.getString("age"));
-                    patient.setNic(rs.getDouble("nic"));
-                    patient.setBranch_id(rs.getInt("branch_id"));
+                Patient patient = new Patient();
+                patient.setId(rs.getInt("patient_id"));
+                patient.setName(rs.getString("name"));
+                patient.setMobile(rs.getString("mobile"));
+                patient.setAddress(rs.getString("address"));
+                patient.setAge(rs.getString("age"));
+                patient.setNic(rs.getString("nic")); // Fixed: getString instead of getDouble
+                patient.setBranch_id(rs.getInt("branch_id"));
 
-                    appointment.setPatient(patient);
-                    appointments.add(appointment);
-                }
+                appointment.setPatient(patient);
+                appointments.add(appointment);
             }
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            try { if (rs != null) rs.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
         return appointments;
     }
 
     @Override
     public Appointment getAppointmentById(int appointmentId) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
         try {
+            conn = MySQL.getConnection();
             String sql = "SELECT a.id, a.details, a.time, a.users_id, a.appointmentDate, " +
                          "p.id as patient_id, p.name, p.mobile, p.address, p.age, p.nic, p.branch_id " +
                          "FROM appointment a " +
                          "JOIN patient p ON a.patient_id = p.id " +
-                         "WHERE a.id = " + appointmentId;
+                         "WHERE a.id = ?";
             
-            try (ResultSet rs = MySQL.execute(sql)) {
-                if (rs.next()) {
-                    Appointment appointment = new Appointment();
-                    appointment.setAppointmentId(rs.getInt("id"));
-                    appointment.setDetails(rs.getString("details"));
-                    appointment.setTime(rs.getString("time"));
-                    appointment.setUserId(rs.getInt("users_id"));
-                    appointment.setChannelDate(rs.getDate("appointmentDate"));
-                    
-                    Patient patient = new Patient();
-                    patient.setId(rs.getInt("patient_id"));
-                    patient.setName(rs.getString("name"));
-                    patient.setMobile(rs.getString("mobile"));
-                    patient.setAddress(rs.getString("address"));
-                    patient.setAge(rs.getString("age"));
-                    patient.setNic(rs.getDouble("nic"));
-                    patient.setBranch_id(rs.getInt("branch_id"));
-                    
-                    appointment.setPatient(patient);
-                    return appointment;
-                }
+            stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, appointmentId);
+            rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                Appointment appointment = new Appointment();
+                appointment.setAppointmentId(rs.getInt("id"));
+                appointment.setDetails(rs.getString("details"));
+                appointment.setTime(rs.getString("time"));
+                appointment.setUserId(rs.getInt("users_id"));
+                appointment.setChannelDate(rs.getDate("appointmentDate"));
+                
+                Patient patient = new Patient();
+                patient.setId(rs.getInt("patient_id"));
+                patient.setName(rs.getString("name"));
+                patient.setMobile(rs.getString("mobile"));
+                patient.setAddress(rs.getString("address"));
+                patient.setAge(rs.getString("age"));
+                patient.setNic(rs.getString("nic")); // Fixed: getString instead of getDouble
+                patient.setBranch_id(rs.getInt("branch_id"));
+                
+                appointment.setPatient(patient);
+                return appointment;
             }
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            try { if (rs != null) rs.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
         return null;
     }
@@ -246,23 +276,33 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
     @Override
     public List<Patient> getAllPatients() {
         List<Patient> patients = new ArrayList<>();
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
         try {
+            conn = MySQL.getConnection();
             String sql = "SELECT * FROM patient ORDER BY name";
-            try (ResultSet rs = MySQL.execute(sql)) {
-                while (rs.next()) {
-                    Patient patient = new Patient();
-                    patient.setId(rs.getInt("id"));
-                    patient.setName(rs.getString("name"));
-                    patient.setMobile(rs.getString("mobile"));
-                    patient.setAddress(rs.getString("address"));
-                    patient.setAge(rs.getString("age"));
-                    patient.setNic(rs.getDouble("nic"));
-                    patient.setBranch_id(rs.getInt("branch_id"));
-                    patients.add(patient);
-                }
+            stmt = conn.prepareStatement(sql);
+            rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                Patient patient = new Patient();
+                patient.setId(rs.getInt("id"));
+                patient.setName(rs.getString("name"));
+                patient.setMobile(rs.getString("mobile"));
+                patient.setAddress(rs.getString("address"));
+                patient.setAge(rs.getString("age"));
+                patient.setNic(rs.getString("nic")); // Fixed: getString instead of getDouble
+                patient.setBranch_id(rs.getInt("branch_id"));
+                patients.add(patient);
             }
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            try { if (rs != null) rs.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
+            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
         return patients;
     }
@@ -283,7 +323,7 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
                 patientStmt.setString(2, patient.getMobile());
                 patientStmt.setString(3, patient.getAddress());
                 patientStmt.setString(4, patient.getAge());
-                patientStmt.setDouble(5, patient.getNic());
+                patientStmt.setString(5, patient.getNic()); // Fixed: setString instead of setDouble
                 patientStmt.setInt(6, patient.getBranch_id());
                 patientStmt.executeUpdate();
                 
@@ -319,7 +359,10 @@ public class AppointmentMediatorImpl implements AppointmentMediator {
             return false;
         } finally {
             try {
-                if (conn != null) conn.setAutoCommit(true);
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
             } catch (SQLException e) {
                 e.printStackTrace();
             }

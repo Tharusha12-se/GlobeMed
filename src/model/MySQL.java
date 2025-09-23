@@ -110,6 +110,20 @@ public class MySQL {
             e.printStackTrace();
         }
     }
+    
+    private void checkDatabaseConnection() {
+    try {
+        java.sql.Connection conn = MySQL.getConnection();
+        if (conn != null && !conn.isClosed()) {
+            System.out.println(" Database connection is working");
+            conn.close();
+        } else {
+            System.out.println("Database connection failed");
+        }
+    } catch (Exception e) {
+        System.out.println(" Database connection error: " + e.getMessage());
+    }
+}
 
     // Helper method for prepared statements with fresh connections
     public static PreparedStatement prepareStatement(String sql) throws SQLException {

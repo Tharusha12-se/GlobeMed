@@ -1,22 +1,19 @@
 package model;
 
 public class Patient {
-
     private int id;
     private String name;
     private String mobile;
     private String address;
     private String age;
-    private double nic;
+    private String nic; // CHANGED from double to String
     private int branch_id;
 
     public int getBranch_id() {
         return branch_id;
     }
 
-
-
-    public Patient(int id, int branch_id, double nic, String age, String mobile, String address, String name) {
+    public Patient(int id, int branch_id, String nic, String age, String mobile, String address, String name) {
         this.id = id;
         this.branch_id = branch_id;
         this.nic = nic;
@@ -66,11 +63,11 @@ public class Patient {
         this.age = age;
     }
 
-    public double getNic() {
+    public String getNic() {
         return nic;
     }
 
-    public void setNic(double nic) {
+    public void setNic(String nic) {
         this.nic = nic;
     }
 

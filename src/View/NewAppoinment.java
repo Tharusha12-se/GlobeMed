@@ -37,231 +37,322 @@ public class NewAppoinment extends javax.swing.JDialog {
     public NewAppoinment(java.awt.Frame parent, boolean modal) {
         super(parent, modal);
         initComponents();
-       // loadBranch();
+        // loadBranch();
         loadDoctors();
         appointmentMediator = new AppointmentMediatorImpl();
-
     }
-    
-    
-    private void loadDoctors (){
-        
+
+    private void loadDoctors() {
         try {
-            
             ResultSet resultSet = MySQL.execute("SELECT * FROM `users` WHERE `user_role_id`='2'");
-            
+
             Vector v = new Vector();
             v.add("SELECT DOCTOR");
-            
-            while (resultSet.next()) {                
-                v.add(resultSet.getString("fname")+" "+resultSet.getString("lname"));
-                
+
+            while (resultSet.next()) {
+                v.add(resultSet.getString("fname") + " " + resultSet.getString("lname"));
             }
-            
+
             DefaultComboBoxModel model = (DefaultComboBoxModel) jComboBox1.getModel();
             model.removeAllElements();
-            
+
             model.addAll(v);
             jComboBox1.setSelectedIndex(0);
-            
+
         } catch (Exception e) {
             e.printStackTrace();
         }
-        
     }
-    
-    
-    private Integer getDoctorIdFromName(String doctorName) {
-    try {
-        String[] names = doctorName.split(" ");
-        if (names.length >= 2) {
-            String firstName = names[0];
-            String lastName = names[1];
-            
-            String query = "SELECT id FROM users WHERE fname = '" + firstName + 
-                          "' AND lname = '" + lastName + "' AND user_role_id = '2'";
-            ResultSet rs = MySQL.execute(query);
-            
-            if (rs != null && rs.next()) {
-                return rs.getInt("id");
-            }
-        }
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
-    return null;
-}
 
-private Integer getCurrentUserBranchId() {
-    try {
-        String email = SessionManager.getEmail();
-        if (email != null) {
-            String query = "SELECT branch_id FROM users WHERE email = '" + email + "'";
-            ResultSet rs = MySQL.execute(query);
-            
-            if (rs != null && rs.next()) {
-                int branchId = rs.getInt("branch_id");
-                
-                // Verify this branch exists
-                String checkQuery = "SELECT id FROM branch WHERE id = " + branchId;
-                ResultSet checkRs = MySQL.execute(checkQuery);
-                
-                if (checkRs != null && checkRs.next()) {
-                    return branchId;
+    private Integer getDoctorIdFromName(String doctorName) {
+        try {
+            String[] names = doctorName.split(" ");
+            if (names.length >= 2) {
+                String firstName = names[0];
+                String lastName = names[1];
+
+                String query = "SELECT id FROM users WHERE fname = '" + firstName
+                        + "' AND lname = '" + lastName + "' AND user_role_id = '2'";
+                ResultSet rs = MySQL.execute(query);
+
+                if (rs != null && rs.next()) {
+                    return rs.getInt("id");
                 }
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-    } catch (Exception e) {
-        e.printStackTrace();
+        return null;
     }
-    return 1; // Fallback to branch ID 1 if available, or return null
-}
 
+    private Integer getCurrentUserBranchId() {
+        try {
+            String email = SessionManager.getEmail();
+            if (email != null) {
+                String query = "SELECT branch_id FROM users WHERE email = '" + email + "'";
+                ResultSet rs = MySQL.execute(query);
 
+                if (rs != null && rs.next()) {
+                    int branchId = rs.getInt("branch_id");
 
-private boolean createAppointmentInDB(String details, Date date, String time, Integer doctorId, Integer patientId) {
+                    // Verify this branch exists
+                    String checkQuery = "SELECT branch_id FROM branch WHERE branch_id = " + branchId;
+                    ResultSet checkRs = MySQL.execute(checkQuery);
+
+                    if (checkRs != null && checkRs.next()) {
+                        return branchId;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 1; // Fallback to branch ID 1
+    }
+
+    private Integer getPatientIdByNIC(String nic) {
+        java.sql.Connection conn = null;
+        java.sql.PreparedStatement pstmt = null;
+        java.sql.ResultSet rs = null;
+
+        try {
+            conn = MySQL.getConnection();
+            String query = "SELECT patient_id FROM patient WHERE nic = ?";
+            pstmt = conn.prepareStatement(query);
+            pstmt.setString(1, nic);
+
+            rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                int patientId = rs.getInt("patient_id");
+                System.out.println("✅ Found existing patient with NIC " + nic + ", ID: " + patientId);
+                return patientId;
+            } else {
+                System.out.println("❌ No existing patient found with NIC: " + nic);
+                return null;
+            }
+
+        } catch (Exception e) {
+            System.out.println("❌ Error searching for patient by NIC: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        } finally {
+            try {
+                if (rs != null) {
+                    rs.close();
+                }
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (conn != null) {
+                    conn.close();
+                }
+            } catch (java.sql.SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private Integer createNewPatient(String name, String mobile, String address, String age, String nic, Integer branchId) {
+        java.sql.Connection conn = null;
+        java.sql.PreparedStatement pstmt = null;
+        java.sql.ResultSet rs = null;
+
+        try {
+            // Get a fresh connection
+            conn = MySQL.getConnection();
+
+            // Use PreparedStatement with RETURN_GENERATED_KEYS
+            String query = "INSERT INTO patient (name, mobile, address, age, nic, branch_id) VALUES (?, ?, ?, ?, ?, ?)";
+            pstmt = conn.prepareStatement(query, java.sql.Statement.RETURN_GENERATED_KEYS);
+
+            pstmt.setString(1, name);
+            pstmt.setString(2, mobile);
+            pstmt.setString(3, address);
+            pstmt.setString(4, age);
+            pstmt.setString(5, nic);
+            pstmt.setInt(6, branchId);
+
+            System.out.println("Executing patient insert: " + name + ", " + nic + ", " + branchId);
+
+            int affectedRows = pstmt.executeUpdate();
+
+            if (affectedRows > 0) {
+                // Get the generated patient_id
+                rs = pstmt.getGeneratedKeys();
+                if (rs != null && rs.next()) {
+                    int generatedId = rs.getInt(1);
+                    System.out.println("✅ New patient created with ID: " + generatedId);
+                    return generatedId;
+                } else {
+                    System.out.println("❌ No generated keys returned, trying alternative method...");
+
+                    // Alternative method: Query the last inserted patient with this NIC
+                    String getQuery = "SELECT patient_id FROM patient WHERE nic = ? ORDER BY patient_id DESC LIMIT 1";
+                    try (java.sql.PreparedStatement getStmt = conn.prepareStatement(getQuery)) {
+                        getStmt.setString(1, nic);
+                        try (java.sql.ResultSet getRs = getStmt.executeQuery()) {
+                            if (getRs.next()) {
+                                int patientId = getRs.getInt("patient_id");
+                                System.out.println("✅ Found patient ID via query: " + patientId);
+                                return patientId;
+                            }
+                        }
+                    }
+                }
+            }
+
+            System.out.println("❌ No rows affected in patient insert");
+            return null;
+
+        } catch (Exception e) {
+            System.out.println("❌ Error creating patient: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        } finally {
+            // Close resources
+            try {
+                if (rs != null) {
+                    rs.close();
+                }
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (conn != null) {
+                    conn.close();
+                }
+            } catch (java.sql.SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+   private boolean createAppointmentInDB(String details, Date date, String time, Integer doctorId, Integer patientId) {
+    java.sql.Connection conn = null;
+    java.sql.PreparedStatement pstmt = null;
+    
     try {
+        conn = MySQL.getConnection();
+        
         // Format time to include seconds
         String formattedTime = time;
         if (time.length() == 5) {
             formattedTime = time + ":00";
         }
         
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String dateStr = dateFormat.format(date);
+        // Include status_id = 2 in the INSERT statement
+        String query = "INSERT INTO appointment (details, time, users_id, appointmentDate, patient_id, date, status_id) VALUES (?, ?, ?, ?, ?, NOW(), ?)";
+        pstmt = conn.prepareStatement(query);
         
-        String query = "INSERT INTO appointment (details,time, users_id, appointmentDate, patient_id,  date ) " +
-                      "VALUES ('" + details + "','" + formattedTime + "', " + doctorId + 
-                      ", '" + dateStr + "', " + patientId + ",NOW() )";
+        pstmt.setString(1, details);
+        pstmt.setString(2, formattedTime);
+        pstmt.setInt(3, doctorId);
+        pstmt.setDate(4, new java.sql.Date(date.getTime()));
+        pstmt.setInt(5, patientId);
+        pstmt.setInt(6, 2); // Set status_id to 2 as requested
         
-        int result = MySQL.executeUpdate(query);
-        return result > 0;
+        System.out.println("Creating appointment for patient ID: " + patientId + ", doctor ID: " + doctorId + ", status_id: 2");
+        
+        int result = pstmt.executeUpdate();
+        
+        if (result > 0) {
+            System.out.println("✅ Appointment created successfully for patient ID: " + patientId);
+            return true;
+        } else {
+            System.out.println("❌ Failed to create appointment");
+            return false;
+        }
         
     } catch (Exception e) {
+        System.out.println("❌ Error creating appointment: " + e.getMessage());
         e.printStackTrace();
         return false;
+    } finally {
+        try {
+            if (pstmt != null) pstmt.close();
+            if (conn != null) conn.close();
+        } catch (java.sql.SQLException e) {
+            e.printStackTrace();
+        }
     }
 }
-    
-    
-    
+
     public void loadBranch() {
-    System.out.println("=== loadBranch() called ===");
-    
-    // Debug session first
-    SessionManager.debugSession();
-    
-    if (!SessionManager.isLoggedIn()) {
-        System.out.println("User not logged in");
-        jTextField7.setText("Please login first");
-        return;
-    }
-    
-    // Get email from session
-    String email = SessionManager.getEmail();
-    System.out.println("Email retrieved from session: " + email);
-    
-    if (email == null || email.isEmpty()) {
-        System.out.println("Email is null or empty");
-        jTextField7.setText("Email not found");
-        return;
-    }
-    
-    try {
-        // Query to get branch information
-        String query = "SELECT b.branch" +
-                      "FROM users u " +
-                      "INNER JOIN branch b ON u.branch_id = b.id " +
-                      "WHERE u.email = '" + email + "'";
-        
-        System.out.println("Executing query: " + query);
-        
-        ResultSet resultSet = MySQL.execute(query);
-        
-        if (resultSet == null) {
-            System.out.println("Query returned null ResultSet");
-            jTextField7.setText("Database error");
+        System.out.println("=== loadBranch() called ===");
+
+        // Debug session first
+        SessionManager.debugSession();
+
+        if (!SessionManager.isLoggedIn()) {
+            System.out.println("User not logged in");
+            jTextField7.setText("Please login first");
             return;
         }
-        
-        if (resultSet.next()) {
-            // Get branch information
-            String branchName = resultSet.getString("branch_name");
-            String branchCode = resultSet.getString("branch_code");
-            
-            // Set the text field
-            String displayText = branchName + " (" + branchCode + ")";
-            jTextField7.setText(displayText);
-            
-            System.out.println("Branch loaded successfully: " + displayText);
-        } else {
-            System.out.println("No branch found for email: " + email);
-            jTextField7.setText("No branch assigned");
-        }
-        
-    } catch (Exception e) {
-        System.out.println("Error loading branch: " + e.getMessage());
-        e.printStackTrace();
-        jTextField7.setText("Error loading branch");
-    }
-    
-    System.out.println("=== loadBranch() completed ===");
-}
-    
-    
-    
 
-// Replace the getPatientIdByNIC method with this:
-private Integer getPatientIdByNIC(String nic) {
-    try {
-        String query = "SELECT id FROM patient WHERE nic = '" + nic + "'";
-        ResultSet rs = MySQL.execute(query);
-        
-        if (rs != null && rs.next()) {
-            return rs.getInt("id");
-        }
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
-    return null;
-}
+        // Get email from session
+        String email = SessionManager.getEmail();
+        System.out.println("Email retrieved from session: " + email);
 
-// Replace the createNewPatient method (if you have one) with this:
-private Integer createNewPatient(String name, String mobile, String address, String age, String nic, Integer branchId) {
-    try {
-        String query = "INSERT INTO patient (name, mobile, address, age, nic, branch_id) " +
-                      "VALUES ('" + name + "', '" + mobile + "', '" + address + "', '" + age + "', '" + nic + "', " + branchId + ")";
-        
-        ResultSet rs = MySQL.execute(query);
-        if (rs != null) {
-            // Get the generated ID
-            String getIdQuery = "SELECT id FROM patient WHERE nic = '" + nic + "'";
-            ResultSet idRs = MySQL.execute(getIdQuery);
-            if (idRs != null && idRs.next()) {
-                return idRs.getInt("id");
+        if (email == null || email.isEmpty()) {
+            System.out.println("Email is null or empty");
+            jTextField7.setText("Email not found");
+            return;
+        }
+
+        try {
+            // Query to get branch information
+            String query = "SELECT b.branch"
+                    + "FROM users u "
+                    + "INNER JOIN branch b ON u.branch_id = b.id "
+                    + "WHERE u.email = '" + email + "'";
+
+            System.out.println("Executing query: " + query);
+
+            ResultSet resultSet = MySQL.execute(query);
+
+            if (resultSet == null) {
+                System.out.println("Query returned null ResultSet");
+                jTextField7.setText("Database error");
+                return;
             }
+
+            if (resultSet.next()) {
+                // Get branch information
+                String branchName = resultSet.getString("branch_name");
+                String branchCode = resultSet.getString("branch_code");
+
+                // Set the text field
+                String displayText = branchName + " (" + branchCode + ")";
+                jTextField7.setText(displayText);
+
+                System.out.println("Branch loaded successfully: " + displayText);
+            } else {
+                System.out.println("No branch found for email: " + email);
+                jTextField7.setText("No branch assigned");
+            }
+
+        } catch (Exception e) {
+            System.out.println("Error loading branch: " + e.getMessage());
+            e.printStackTrace();
+            jTextField7.setText("Error loading branch");
         }
-    } catch (Exception e) {
-        e.printStackTrace();
+
+        System.out.println("=== loadBranch() completed ===");
     }
-    return null;
-}
 
-// Clear form method
-private void clearForm() {
-    jTextField1.setText("");
-    jTextField6.setText("");
-    jTextField3.setText("");
-    jTextField4.setText("");
-    jTextField5.setText("");
-    jTextField7.setText("");
-    jTextField8.setText("");
-    jDateChooser1.setDate(null);
-    jComboBox1.setSelectedIndex(0);
-    jTextField1.requestFocus();
-}
-    
-
+    // Clear form method
+    private void clearForm() {
+        jTextField1.setText("");
+        jTextField6.setText("");
+        jTextField3.setText("");
+        jTextField4.setText("");
+        jTextField5.setText("");
+        jTextField7.setText("");
+        jTextField8.setText("");
+        jDateChooser1.setDate(null);
+        jComboBox1.setSelectedIndex(0);
+        jTextField1.requestFocus();
+    }
 
     /**
      * This method is called from within the constructor to initialize the form.
@@ -428,107 +519,105 @@ private void clearForm() {
 
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
         // TODO add your handling code here:
-      
-     try {
-    // Get other field values
-    String name = jTextField1.getText().trim();
-    String address = jTextField6.getText().trim();
-    String details = jTextField3.getText().trim();
-    String nic = jTextField4.getText().trim();
-    String mobile = jTextField5.getText().trim();
-    String time = jTextField7.getText().trim();
-    String age = jTextField8.getText().trim();
-    String doctor = jComboBox1.getSelectedItem().toString();
-    Date scheduledDate = jDateChooser1.getDate();
 
-    // Validation
-    if (name.isEmpty() || mobile.isEmpty() || address.isEmpty() || nic.isEmpty() || 
-        time.isEmpty() || age.isEmpty() || "SELECT DOCTOR".equals(doctor) || scheduledDate == null) {
-        JOptionPane.showMessageDialog(this, "Please fill all required fields", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
+        try {
+            // Get field values
+            String name = jTextField1.getText().trim();
+            String address = jTextField6.getText().trim();
+            String details = jTextField3.getText().trim();
+            String nic = jTextField4.getText().trim();
+            String mobile = jTextField5.getText().trim();
+            String time = jTextField7.getText().trim();
+            String age = jTextField8.getText().trim();
+            String doctor = jComboBox1.getSelectedItem().toString();
+            Date scheduledDate = jDateChooser1.getDate();
 
-    // Validate mobile number
-    if (!mobile.matches("\\d{10}")) {
-        JOptionPane.showMessageDialog(this, "Please enter a valid 10-digit mobile number", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
+            System.out.println("=== Starting Appointment Creation ===");
+            System.out.println("Patient: " + name + ", NIC: " + nic + ", Mobile: " + mobile);
 
-    // Validate NIC format
-    if (!nic.matches("\\d{9}[Vv]?|\\d{12}")) {
-        JOptionPane.showMessageDialog(this, "Please enter a valid NIC number (9 digits with V or 12 digits)", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
+            // Validation
+            if (name.isEmpty() || mobile.isEmpty() || address.isEmpty() || nic.isEmpty()
+                    || time.isEmpty() || age.isEmpty() || "SELECT DOCTOR".equals(doctor) || scheduledDate == null) {
+                JOptionPane.showMessageDialog(this, "Please fill all required fields", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
-    // Validate age
-    try {
-        int ageValue = Integer.parseInt(age);
-        if (ageValue <= 0 || ageValue > 120) {
-            JOptionPane.showMessageDialog(this, "Please enter a valid age (1-120)", 
-                "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            // Validate mobile number
+            if (!mobile.matches("\\d{10}")) {
+                JOptionPane.showMessageDialog(this, "Please enter a valid 10-digit mobile number", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Get doctor ID
+            Integer doctorId = getDoctorIdFromName(doctor);
+            if (doctorId == null) {
+                JOptionPane.showMessageDialog(this, "Error: Could not find selected doctor", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            System.out.println("Doctor ID: " + doctorId);
+
+            // Get branch ID
+            Integer branchId = getCurrentUserBranchId();
+            if (branchId == null) {
+                JOptionPane.showMessageDialog(this, "Error: Could not determine your branch.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            System.out.println("Branch ID: " + branchId);
+
+            // Check if patient exists
+            Integer patientId = getPatientIdByNIC(nic);
+            System.out.println("Patient search result: " + patientId);
+
+            if (patientId == null) {
+                System.out.println("Creating new patient...");
+                patientId = createNewPatient(name, mobile, address, age, nic, branchId);
+                System.out.println("New patient ID result: " + patientId);
+
+                if (patientId == null) {
+                    // Check if patient was actually inserted but ID wasn't retrieved
+                    Integer checkPatientId = getPatientIdByNIC(nic);
+                    if (checkPatientId != null) {
+                        System.out.println("Patient was inserted! Using ID: " + checkPatientId);
+                        patientId = checkPatientId;
+                    } else {
+                        JOptionPane.showMessageDialog(this,
+                                "Error: Could not create or retrieve patient record.\n"
+                                + "Please check if patient with NIC " + nic + " already exists.",
+                                "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                }
+            }
+
+            System.out.println("Final Patient ID to use: " + patientId);
+
+            // Create appointment
+            boolean appointmentCreated = createAppointmentInDB(details, scheduledDate, time, doctorId, patientId);
+
+            if (appointmentCreated) {
+                JOptionPane.showMessageDialog(this,
+                        "✅ Appointment created successfully!\n"
+                        + "Patient: " + name + "\n"
+                        + "Patient ID: " + patientId + "\n"
+                        + "Date: " + new SimpleDateFormat("yyyy-MM-dd").format(scheduledDate) + " at " + time + "\n"
+                        + "Doctor: " + doctor,
+                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                clearForm();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Failed to create appointment but patient was registered.\n"
+                        + "Patient ID: " + patientId + "\n"
+                        + "Please try creating the appointment again.",
+                        "Warning", JOptionPane.WARNING_MESSAGE);
+            }
+
+        } catch (Exception e) {
+            System.out.println("❌ Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Unexpected error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
-    } catch (NumberFormatException e) {
-        JOptionPane.showMessageDialog(this, "Please enter a valid age number", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
 
-    // Get doctor ID from name
-    Integer doctorId = getDoctorIdFromName(doctor);
-    if (doctorId == null) {
-        JOptionPane.showMessageDialog(this, "Error: Could not find selected doctor", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
 
-    // Get current user's branch ID (make sure it's valid)
-    Integer branchId = getCurrentUserBranchId();
-    if (branchId == null) {
-        JOptionPane.showMessageDialog(this, "Error: Could not determine your branch. Please contact administrator.", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-        return;
-    }
-
-    // Check if patient already exists by NIC
-    Integer patientId = getPatientIdByNIC(nic);
-    
-    if (patientId == null) {
-        // Create new patient with proper branch_id
-//        patientId = createNewPatient(name, mobile, address, age, nic, branchId);
-//        if (patientId == null) {
-//            JOptionPane.showMessageDialog(this, "Error: Could not create patient record", 
-//                "Error", JOptionPane.ERROR_MESSAGE);
-//            return;
-//        }
-    }
-
-    // Create appointment in database
-    boolean appointmentCreated = createAppointmentInDB(details, scheduledDate, time, doctorId, patientId);
-
-    if (appointmentCreated) {
-        JOptionPane.showMessageDialog(this, 
-            "Appointment created successfully!\n" +
-            "Patient: " + name + "\n" +
-            "Date: " + new SimpleDateFormat("yyyy-MM-dd").format(scheduledDate) + " at " + time + "\n" +
-            "Doctor: " + doctor, 
-            "Success", JOptionPane.INFORMATION_MESSAGE);
-        clearForm();
-    } else {
-        JOptionPane.showMessageDialog(this, "Failed to create appointment. Please try again.", 
-            "Error", JOptionPane.ERROR_MESSAGE);
-    }
-
-} catch (Exception e) {
-    e.printStackTrace();
-    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage(), 
-        "Error", JOptionPane.ERROR_MESSAGE);
-}
-    
-        
     }//GEN-LAST:event_jButton2ActionPerformed
 
     private void jTextField4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField4ActionPerformed
@@ -543,7 +632,7 @@ private void clearForm() {
      * @param args the command line arguments
      */
     public static void main(String args[]) {
-       
+
         FlatDarculaLaf.setup();
 
         /* Create and display the dialog */
